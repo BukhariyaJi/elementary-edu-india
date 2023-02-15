@@ -28,8 +28,7 @@ The data set include:-
 - ggthemes
 - conflicted
 - ggrepel
-- DT
-- shiny
+
 
 
 
