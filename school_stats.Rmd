@@ -1,0 +1,1146 @@
+---
+title: " Report on Elementary Education in India"
+author: "by Rick Bukhariya"
+date: "2023-01-05"
+output:
+  html_document:
+    code_folding: show
+    df_print: paged
+    toc: TRUE
+    toc_float: TRUE
+    number_sections: true
+bibliography: references.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Inroduction
+
+I have used the School Education Statistics data set [@gdata] provided by the National Informatics Centre (NIC), Ministry of Electronics & Information Technology, Government of India to create a detailed report.
+
+In this report I have sometimes have used the word state(s) to which I include both the states and the union territories.
+
+This is a detailed report but to see a short version (without code):-
+
+1.  click **Code** near the title,
+2.  then click **Hide All Code**.
+
+# Ask Phase
+
+## Task
+
+**Analyze School Education Statistics data in order to gain insight into into School System across India .**
+
+# Preparing Data
+
+## About Dataset
+
+The data has been taken from School Education Statistics data set[@gdata] provided by the National Informatics Centre (NIC), Ministry of Electronics & Information Technology, Government of India. And the data in the dataset has been taken from reports published by National University of Educational Planning and Administration and Department of School Education and Literacy, Ministry of Human Resource Development Government of India. In which the Raw data presented in the document or used for calculating in- dicators are essentially based on data provided by the States and U/Ts through annual data collection (as on 30th September 2014-16) under DISE.[@rep13; @rep14; @rep15]
+
+The data set include:-
+
+-   Facilities
+-   water
+-   electricity
+-   computers
+-   girls toilet
+-   boys toilet
+-   Gross Enrollment rate
+-   Drop-out Rate
+
+## Storage and Organization
+
+I have used API's provided by the data.gov.in to extract the data into a JSON file and then converted the data into a list of data frames.
+
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Element Name     | Description                                                                                                                                                                                        |
++:================:+:===================================================================================================================================================================================================+
+| water            | Percentage of Schools with Drinking Water Facility from 2013-14 to 2015-16                                                                                                                         |
+|                  |                                                                                                                                                                                                    |
+|                  | ~(Availability of any type of Drinking water facility is checked.)[@water]~                                                                                                                        |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| gross_enrollment | Gross Enrolment Ratio from 2013-14 to 2015-16 ~**NOTE -  In a few states such as Odisha higher secondary is part of higher education may not have been covered under U-DISE.[@udise; \@genroll]**~ |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| drop_out_rate    | Drop-out Rate from 2012-13 to 2014-15 ~NOTE -~  ~In a few states such as Odisha higher secondary is part of higher education may not have been covered under U-DISE.[\@udise; \@drop]~             |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| computers        | Percentage of Schools with Computers from 2013-14 to 2015-16                                                                                                                                       |
+|                  |                                                                                                                                                                                                    |
+|                  | ~(Availability of at least one computer is checked in all the schools)[@comp]~                                                                                                                     |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| electricity      | Percentage of Schools with Electricity from 2013-14 to 2015-16                                                                                                                                     |
+|                  |                                                                                                                                                                                                    |
+|                  | ~(Availability of Electricity connection is checked in all the schools)[@elec]~                                                                                                                    |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| boys_toilet      | Schools with Boys Toilet from 2013-14 to 2015-16                                                                                                                                                   |
+|                  |                                                                                                                                                                                                    |
+|                  | ~(Availability of Toilet in Boys and Co Educational Schools)[@btoi]~                                                                                                                               |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| girls_toilet     | Schools with Girls Toilet from 2013-14 to 2015-16                                                                                                                                                  |
+|                  |                                                                                                                                                                                                    |
+|                  | ~(Availability of Toilet is checked in Girls and Co Educational Schools)[@gtoi]~                                                                                                                   |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+## Data Ethics
+
+#### Licensing
+
+**Government Open Data License - India** Government Open Data License (GODL) gives freedom to users for effective use of datasets available on OGD Platform. Users have to follow the condition of GODL while using the data. The content used from data.gov.in are owned by the respective Ministry/State/Department/Organization licensed under the Government Open Data License - India
+
+#### Privacy
+
+The Dataset has no Personal Identifiable Info (PII) such as Name, Address, GPS Logs, User ID's and there passwords, Bluetooth Logs, Contactinformation on the dataset.
+
+## Bias and Credibility
+
+Lets check using ROCCC: - The Data is reliable as it has been provided by National University of Educational Planning and Administration and Department of School Education and Literacy, Ministry of Human Resource Development Government of India.[@rep13, @rep14; @rep15] - The Dataset is original as it has been provided by the National Informatics Centre (NIC), Ministry of Electronics & Information Technology, Government of India[@gdata] on data.gov.in. - Dataset is comprehensive as the data is collected based on data provided by the States and UTs through annual data collection (as on 30th September 2014-16) under DISE - The Dataset is not current as it only contains data from 2012[@drop] to 2015[@gdata]. - The Dataset is cited.
+
+# Processing Data
+
+## Uplaoding Data
+
+I have taken data from [data.gov.in](https://data.gov.in/catalog/school-education-statistics#) [@gdata] which is provided by **UDISE-Unified District Information System for Education[@udise]** using API provided by the data.gov.in .
+
+So first we load the library to load some libraries to work with the Data.
+
+```{r library, message = FALSE, warning=FALSE}
+library(tidyverse)
+library(janitor)
+# Libraries  the data via API's.
+library(httr)
+library(jsonlite)
+# Library for loading India's Map
+library(raster)
+library(sf)
+library(ggthemes)
+# Library to check for any conflict between any of the libraries 
+library(conflicted)
+
+# conflict preferences
+conflict_prefer("filter", "dplyr")
+conflict_prefer("select", "dplyr")
+```
+
+There are multiple Data sets, which means there are multiple APIs so we need to create a loop which can call multiple APIs and store the data.
+
+So we divide the API link into three different parts which are `base` which contains the base start which a API from data.gov.in has, `d_set` which contains the API code of different dataset that we require, and `api_key` contains the API key provided to me from data.gov.in[@gdata], which also at the end contains the format and the data limit. (Here we have set the format to JSON).
+
+```{r api formula}
+base <- 'https://api.data.gov.in/resource/'
+
+d_set <- c('766ab672-4680-4348-9680-5f9dc471ee90',
+           '07b38f40-e011-4063-ba92-a757cedaeacf',
+           'a5a6d4e9-5b82-4395-aa3d-338e075eafb3',
+           '8ee1905b-5949-4a60-9954-18776659ec44',
+           'dd29fc42-00c1-4e55-94e9-d9eda13b5d5d',
+           '3f9e2f35-843c-4d53-8e28-e316ee2f5604',
+           '285789ec-e7c1-4a78-9737-3bd6d81bc02c')
+           
+api_key <- '?api-key=579b464db66ec23bdd00000162263e23a8dc478850bde3bef12e05ed&format=json&limit=1000'
+
+```
+
+There are different datasets which means we have to create a list to store all the different datasets.
+
+And then we create a loop which takes the API link, takes the JSON file converts it into plain text and stores in the each list item. (The Code is explained below).
+
+```{r api loop}
+
+listofdf <- list()                           #List to store different dataframes 
+
+for(i in 1:length(d_set)) {
+  
+  API_URL <- paste0(base, d_set[i], api_key) #joining 3 parts to create a API link
+  temp_raw <- GET(API_URL)                   #Calling the API and storing the data in raw object
+  temp_df <- fromJSON(rawToChar(temp_raw$content))$records
+                                             #converting JSON results into a dataframe
+  listofdf[[i]] <- temp_df                   #storing dataframe in a list item
+ 
+}
+
+```
+
+Then we name each list `listofdf` elements with corresponding to the data that is present in the list element. Each element name in the list `listofdf` corresponding to the data that they store.
+
+This is done so that we can easily use the specific dataset without remembering its element sequence.
+
+```{r naming list df}
+
+name_list <- list('gross_enrolment','drop_out_rate','water','computers',
+                  'electricity','boys_toilet','girls_toilet')
+
+names(listofdf) <- name_list
+```
+
+Here is table with element name and description.
+
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Element Name     | Description                                                                                                                                                                                        |
++:=================+:===================================================================================================================================================================================================+
+| water            | Percentage of Schools with Drinking Water Facility from 2013-14 to 2015-16                                                                                                                         |
+|                  |                                                                                                                                                                                                    |
+|                  | ~(Availability of any type of Drinking water facility is checked.)[@water]~                                                                                                                        |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| gross_enrollment | Gross Enrolment Ratio from 2013-14 to 2015-16 ~**NOTE -  In a few states such as Odisha higher secondary is part of higher education may not have been covered under U-DISE.[@udise; \@genroll]**~ |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| drop_out_rate    | Drop-out Rate from 2012-13 to 2014-15 ~NOTE -~  ~In a few states such as Odisha higher secondary is part of higher education may not have been covered under U-DISE.[\@udise; \@drop]~             |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| computers        | Percentage of Schools with Computers from 2013-14 to 2015-16                                                                                                                                       |
+|                  |                                                                                                                                                                                                    |
+|                  | ~(Availability of at least one computer is checked in all the schools)[@comp]~                                                                                                                     |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| electricity      | Percentage of Schools with Electricity from 2013-14 to 2015-16                                                                                                                                     |
+|                  |                                                                                                                                                                                                    |
+|                  | ~(Availability of Electricity connection is checked in all the schools)[@elec]~                                                                                                                    |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| boys_toilet      | Schools with Boys Toilet from 2013-14 to 2015-16                                                                                                                                                   |
+|                  |                                                                                                                                                                                                    |
+|                  | ~(Availability of Toilet in Boys and Co Educational Schools)[@btoi]~                                                                                                                               |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| girls_toilet     | Schools with Girls Toilet from 2013-14 to 2015-16                                                                                                                                                  |
+|                  |                                                                                                                                                                                                    |
+|                  | ~(Availability of Toilet is checked in Girls and Co Educational Schools)[@gtoi]~                                                                                                                   |
++------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+## Cleaning Data
+
+### Checking Datatypes and Correcting Misspelled words
+
+We check the datatype of each data frame stored in the list `listofdf`.
+
+```{r checking datatypes, results='hide'}
+
+str(listofdf)
+```
+
+When we look at the datatype of these dataframes present in the list, we find that the all the columns in the dataframes are `chartype` but the dataframe includes columns with character, year and percentages.
+
+Some data frames contains "NR" which means No Response,"\@" and "Uppe_r\_Primary" (some error at data entry).
+
+The data in the data sets were for year format YYYY-YY but when looked closely at the reports published by UDISE [@rep13; @rep14; @rep15] we find that the data in the reports were collected in the month of September starting year so for the sake of calculations lets have only one year value.
+
+So we need to change the datatypes.
+
+```{r changing datatypes}
+
+listofdf <- type.convert(listofdf, na.strings = c("NR", "@", "Uppe_r_Primary"), as.is = TRUE)
+
+for(i in 1:length(listofdf)){
+ listofdf[[i]]$`_year` <- as.Date(listofdf[[i]]$`_year`, format = "%Y") 
+ listofdf[[i]]$`_year` <- as.numeric(format(listofdf[[i]]$`_year`, "%Y"))
+}
+
+```
+
+Lets Check the Data type.
+
+```{r checking datatype after correction, results='hide'}
+str(listofdf)
+```
+
+### Removing Duplicates
+
+Lets check for any duplicates in the data frames present in the list of data frames.
+
+```{r checking for duplicates}
+
+for(i in 1:length(listofdf)){ 
+  print(sum(duplicated(listofdf[[i]])))
+}
+
+```
+
+So there are no duplicates so there is no need to remove any.
+
+### Changing Column Name
+
+The column name `_year` and `sec_with_hrsec_` can be annoying while doing analysis, so we change the column name to `year` and `sec_with_hrsec` respectively.
+
+```{r column name}
+
+for(i in 1:length(listofdf)){ 
+  listofdf[[i]] <- listofdf[[i]] %>% clean_names()
+}
+
+```
+
+### Arranging State Order and Correcting Names
+
+-   When we look at `girls_toilet` dataset we have to move `All India` rows to the bottom of the dataset.
+
+-   In `gross_enrolment` dataset the state names are not arranged in the format as the other dataset so we need to change the state order.
+
+-   In `gross_enrollment` we need to change `MADHYA PRADESH` and `Uttaranchal` to `Madhya Pradesh` and `Uttarakhand` respectively.
+
+-   In `drop_out_rate` we need to change `A & N Islands` to `Andaman & Nicobar Islands`.
+
+```{r making data consistent}
+
+listofdf$girls_toilet <- listofdf$girls_toilet[c(4:110, 1:3),]
+
+x <- arrange(listofdf$gross_enrolment, state_ut, year) 
+listofdf$gross_enrolment <- x[c(4:110, 1:3), ]
+
+listofdf$drop_out_rate$state_ut[listofdf$drop_out_rate$state_ut == 'A & N Islands'] <- 'Andaman & Nicobar Islands'
+  
+listofdf$gross_enrolment$state_ut[listofdf$gross_enrolment$state_ut == 'MADHYA PRADESH'] <- 'Madhya Pradesh'
+
+listofdf$gross_enrolment$state_ut[listofdf$gross_enrolment$state_ut == 'Uttaranchal'] <- 'Uttarakhand'
+
+```
+
+### Null Values
+
+At some entries the data is 0 which could mean that there is no school in that categories. For example `u_primary_only` means from class 6^th^ to class 8^th^. Logically there will be less or no school in this categories in small states or union territory like Andaman and Nicobar Islands.
+
+So we need to change Zeros to `NA` for calculations as to avoid the zeros while performing analytically operations on the dataset.
+
+```{r converting zeros to null}
+
+for(i in 3:length(listofdf)){ 
+  listofdf[[i]] <- na_if(listofdf[[i]], 0)
+}
+```
+
+**NOTE - In the first two datasets `gross_enrollment`[@genroll] and `drop_out_rate`[@drop]we have not changed any zeros to NULL values.**
+
+Lets check for NULL values in the dataset.
+
+```{r finding Null values}
+
+for(i in 1:length(listofdf)){ 
+  print(sum(rowSums(is.na(listofdf[[i]]))))
+}
+
+```
+
+When we look at the above data we find there are **186** `null values` in the `drop_out_rate` [@drop] dataset and **we cannot remove all the rows with NULL values or fill the null values** with mean values as the data is of different state and many factors influence the drop-out rate so we cannot fill those NULL values.
+
+As the data is specific and related to states we cannot remove the NULL values there is no empty rows so removing data row which contains some NULL values can also remove the valuable data.
+
+But we need to keep above point in mind while doing the analysis.
+
+# Analysing Data
+
+## Top States with Highest Dropout Rate
+
+At first the data given in the `drop_out_rate` dataset are divided into:-
+
+-   Primary (class 1^st^ to 5^th^)
+-   Upper Primary (class 6^th^ to 8^th^)
+-   Secondary (class 9^th^ to 10^th^)
+-   Higher Secondary (class 11^th^ to 12^th^)
+
+And sub-divided into boys and Girls.[@drop]
+
+**NOTE - In a few states such as Odisha higher secondary is part of higher education may not have been covered under U-DISE.[@genroll]**
+
+So to use the `drop_out_rate` dataset for ranking states and U/T we need first do the folllowing steps:-
+
+-   Add a column which contains the average dropout rate for students of all groups in a particular state or U/T as `all_students`.
+    -   To do the above task we need to remove the rows which as NA values in column `primary_total`, `upper_primary_total`, `secondary_total`, and `hrsecondary_total`.
+-   Make a list of **Top 10 States and Union Territories**.
+
+```{r top 10 dropout 2013}
+
+#removing the rows which as NA values in column "primary_total", 
+#"upper_primary_total", "secondary_total", and "hrsecondary_total".
+drop_df <- listofdf$drop_out_rate %>% 
+  dplyr::filter(.,!is.na(primary_total), !is.na(upper_primary_total), 
+         !is.na(secondary_total), !is.na(hrsecondary_total)) %>% 
+  dplyr::select(., state_ut, year, primary_total, upper_primary_total, 
+         secondary_total, hrsecondary_total)
+
+#Add a column which contains the average dropout rate for students of all groups
+#in a particular state or U/T as "all_students".
+drop_df$all_students <-  round(rowMeans(subset(drop_df, select = c( "primary_total", "upper_primary_total","secondary_total","hrsecondary_total")), na.rm = TRUE), 2)
+
+#top 10 states and U/T.
+drop_ten <- drop_df %>% dplyr::select(., state_ut, year, all_students) %>% 
+  filter(., year == 2013) %>% 
+  arrange(., desc(all_students)) %>% 
+  slice(., 1:10)
+
+drop_ten
+```
+
+## School type with most Facilities
+
+So we find that schools which has:-
+
+-   Classes 1^st^ to 12^th^ is First,
+-   Classes 6^th^ to 12^th^ is Second,
+-   Classes 1^th^ to 10^th^ is third,
+-   Primary only schools (1^st^ to 5^th^) has lowest overall facilities availability.
+
+## Ranking States w.r.t. Facilities
+
+In this we create a list of data frame `state_rank` which contains individual data frames based on the facilities they have from highest to lowest.
+
+```{r Ranking States w.r.t.facilities }
+state_rank <- list()
+for (i in 3:length(listofdf)){
+  
+  df <- listofdf[[i]] %>%
+    select(.,  state_ut, year, all_schools) %>% 
+    filter(.,!(state_ut == 'All India'), year == 2013) %>% 
+    arrange(., year, desc(all_schools))  
+  
+  x <- i-2
+  state_rank[[x]] <- df
+}
+
+names(state_rank) <- name_list[3:7]
+
+```
+
+### Top 10 States and U/T
+
+To find the top 10 states with individual highest facility we first need to sort the individual data frames present in the `state_rank` list and then select the only top 10 the dataframes.
+
+```{r top 10 faci, paged.print = TRUE, rows.print = 6}
+state_rank_top <- list()
+for (i in 1:length(state_rank)){
+  
+  df <- state_rank[[i]] %>% 
+    arrange(., year, desc(all_schools)) %>% 
+    slice(., 1:10)
+  
+  df$rank <- c(1:10)
+  df <- df %>% relocate(rank, .before = state_ut)
+  
+  state_rank_top[[i]] <- df
+}
+
+names(state_rank_top) <- name_list[3:7]
+
+state_rank_top$water 
+
+```
+
+For finding the states with overall best facilities we need to:-
+
+-   Convert `all_schools` percentages to `score` of the states and U/T in `state_rank` list of data frames.
+
+```{r overall top 10, rows.print = 6}
+over_top_ten <- rbind(state_rank$water,state_rank$computers, state_rank$electricity, 
+                  state_rank$boys_toilet, state_rank$girls_toilet) %>% 
+  group_by(state_ut) %>%  
+  summarise(score = sum(all_schools)) %>% 
+  arrange(., desc(score)) %>% 
+  slice(., 1:10)
+
+over_top_ten$rank <- c(1:10)
+over_top_ten <- over_top_ten %>% relocate(rank)
+
+over_top_ten
+```
+
+## Relationship of Facilities with Drop-out Rate
+
+To find relation between facilities and drop-out rate we have to remove the states in the facilities data frames that have `NA` values in `primary_total`, `upper_primary_total`, `secondary_total`, and `hrsecondary_total` *in* `drop_out_rate` data frame.
+
+**NOTE - In a few states such as Odisha higher secondary is part of higher education may not have been covered under U-DISE.[@genroll]**
+
+```{r faci & dropout}
+
+t10faci <- rbind(state_rank$water,state_rank$computers, state_rank$electricity, 
+                  state_rank$boys_toilet, state_rank$girls_toilet) %>% 
+  group_by(state_ut) %>%  
+  summarise(score = sum(all_schools)) %>% 
+  arrange(., score) %>% 
+  filter(., !((state_ut == 'Bihar') |
+                 (state_ut == 'Chandigarh') |
+                 (state_ut == 'Chhattisgarh') |
+                 (state_ut == 'Delhi') |
+                 (state_ut == 'Goa') |
+                 (state_ut == 'Jharkhand') |
+                 (state_ut == 'Karnataka') |
+                 (state_ut == 'Kerala') |
+                 (state_ut == 'Lakshadweep') |
+                 (state_ut == 'Meghalaya') |
+                 (state_ut == 'Mizoram') |
+                 (state_ut == 'Odisha') |
+                 (state_ut == 'Rajasthan') |
+                 (state_ut == 'Uttar Pradesh') |
+                 (state_ut == 'Uttarakhand') |
+                 (state_ut == 'All India'))) %>% 
+  slice(., 1:10)
+
+t10faci$rank <- c(1:10)
+t10faci <- t10faci %>% relocate(rank)
+
+drop_and_faci <- data.frame(ranks = t10faci$rank, 
+                            faci_state_ut = t10faci$state_ut, 
+                            drop_state_ut = drop_ten$state_ut)
+
+drop_and_faci
+
+```
+
+By looking at the above table we find that states such as *Assam, Nagaland, Arunachal Pradesh, Tripura, Madhya Pradesh, Manipur* are common (**only 6 are common**) in both list which has overall lowest facilities and high drop-out rate.
+
+There is no direct relation as some states such as:-
+
+-   **Assam** which is at the 1^st^ position in lowest facilities availability is at 2^nd^ in drop-out rate,
+
+-   **Arunachal Pradesh** which is 2^nd^ in the lowest facilities availability is at 4^th^ in drop-out rate,
+
+-   **Madhya Pradesh** which is 6^th^ in the lowest facilities availability but is at 3^rd^ in drop-out rate,
+
+-   **Jammu and Kashmir** which is 3^rd^, **West Bengal** at 5^th^ in the lowest facilities availability is *nowhere in the top 10 drop-out rate list*,
+
+-   **Nagaland** is at **7^th^** position in the lowest facilities availability but is at **1^st^** in drop-out rate,
+
+-   **Gujarat** which is at 9^th^ position in the drop-out rate but is at 6^th^ position in the overall best facilities availability list.
+
+We can say that the states which has lowest facilities availability have a higher chance that they have a higher drop-out rate but these facilities (water, electricity, computers, boys toilet, girls toilet) are **not a clear indicator that they have a high drop-out rate**.
+
+## Gross Enrollment
+
+### Top 10 Gross Enrollment
+
+Lets analyze the `gross-enrollment` data frame. At first we find the states and U/T with high gross enrollment rate.
+
+```{r gross enrollment}
+t10grossenroll <- listofdf$gross_enrolment %>% 
+  filter(., state_ut != 'All India', year == 2013) %>% 
+  select(., state_ut, year, primary_total, upper_primary_total, 
+         secondary_total, higher_secondary_total)
+
+t10grossenroll$all_students <- round(rowMeans(subset(t10grossenroll, select = c( "primary_total", "upper_primary_total","secondary_total","higher_secondary_total")), na.rm = TRUE), 2)
+
+t10grossenroll <- t10grossenroll %>% 
+  select(., state_ut, all_students) %>% 
+  arrange(., desc(all_students)) %>%
+  
+  slice(., 1:10)
+
+t10grossenroll$rank <- c(1:10)
+t10grossenroll <- t10grossenroll %>% relocate(rank)
+
+t10grossenroll
+```
+
+### Drop-out Rate and Enrollment Rate
+
+When we compare the states with high enrollment rate states with high dropout rate we find that 4 states in common, this could be for the following reason:-
+
+-   **"Gross" enrollment includes students of all ages. In other words, it includes students whose age exceeds the official age group (e.g. repeaters). Thus, if there is late enrollment, early enrollment, or repetition, the total enrollment can exceed the population of the age group that officially corresponds to the level of education -- leading to ratios greater than 100 percent.[@gen100]**
+
+As we seen above because of repeaters, late and early enrollment the `gross_enrollment` is greater than 100 for some places so this could contain the dropout students which decided to repeat, or take a early or late enrollment. We cannot completely remove the drop-out students as we don't have more detailed data but we can try to remove the states which has gross enrollment above certain number.
+
+To do so lets see the `gross_enrollment` and `drop_out_rate` side by side.
+
+```{r gross enrollment & dropout, cols.print= 7}
+t10enroll <- listofdf$gross_enrolment %>% 
+  filter(., state_ut != 'All India', year == 2013) %>% 
+  select(., state_ut, year, primary_total, upper_primary_total, 
+         secondary_total, higher_secondary_total)
+
+t10enroll$all_students <- round(rowMeans(subset(t10enroll, select = c( "primary_total", "upper_primary_total","secondary_total","higher_secondary_total")), na.rm = TRUE), 2)
+
+t10enroll <- t10enroll %>% 
+  select(., state_ut,primary_total, upper_primary_total, secondary_total, higher_secondary_total, all_students) %>% 
+  arrange(., desc(all_students)) %>%
+  filter(., !((state_ut == 'Bihar') |
+                 (state_ut == 'Chandigarh') |
+                 (state_ut == 'Chhattisgarh') |
+                 (state_ut == 'Delhi') |
+                 (state_ut == 'Goa') |
+                 (state_ut == 'Jharkhand') |
+                 (state_ut == 'Karnataka') |
+                 (state_ut == 'Kerala') |
+                 (state_ut == 'Lakshadweep') |
+                 (state_ut == 'Meghalaya') |
+                 (state_ut == 'Mizoram') |
+                 (state_ut == 'Odisha') |
+                 (state_ut == 'Rajasthan') |
+                 (state_ut == 'Uttar Pradesh') |
+                 (state_ut == 'Uttarakhand') |
+                 (state_ut == 'All India'))) %>% 
+  slice(., 1:10)
+
+t10enroll$rank <- c(1:10)
+t10enroll <- t10enroll %>% relocate(rank)
+
+t10enroll
+```
+
+By looking at the above data we find that the enrollment in any of these four categories - primary_total, - upper_primary_total, - secondary_total, and - higher_secondary_total in the top 10 gross enrollment is greater than 110 in two or more than categories then the state also has a high dropout rate. But when looked at the top 11 to 20 we find **Nagaland, Madhya Pradesh and Assam** which are on top 3 in dropout rate but they have only only one category which is greater than 110. But we look at Himachal Pradesh it has one category which is greater than 110.
+
+So we cannot establish a clear relationship between dropout rate and gross enrollment.
+
+### Overall Facilities and Enrollment Rate
+
+Lets look at top 10 states and U/T with high gross enrollment rate and top 10 states and U/T with high overall facilities avalibility.
+
+```{r enroll & faci, rows.print = 6}
+enroll_and_faci <- data.frame(rank = c(1:10), 
+                             high_enrollment = t10grossenroll$state_ut,
+                             high_facility = over_top_ten$state_ut)
+
+enroll_and_faci
+```
+
+When we look into states and u/t with high gross enrollment and states and u/t with overall facilities availability only two states and U/T are on both lists and **Lakshadweep** is at top in the overall facilities list but 6^th^ on gross enrollment list and **Delhi** is in top in gross enrollment list but at 5^th^ position in the overall facilities list.
+
+# Sharing Insights
+
+## Drop-out in Different Class Levels
+
+At first the data given in the drop_out_rate dataset are divided into:-
+
+-   Primary (class 1st to 5th)
+-   Upper Primary (class 6th to 8th)
+-   Secondary (class 9th to 10th)
+-   Higher Secondary (class 11th to 12th)
+
+And sub-divided into boys and Girls.
+
+```{r}
+temp_df_2 <- listofdf$drop_out_rate %>% 
+  filter(.,!is.na(primary_total), !is.na(upper_primary_total), 
+         !is.na(secondary_total), !is.na(hrsecondary_total), state_ut == "All India") %>% 
+  select(., state_ut, year, primary_total, upper_primary_total, 
+         secondary_total, hrsecondary_total)
+
+df.long <- pivot_longer(temp_df_2, cols=3:6, names_to = "class", values_to = "percentage")
+df.long$classtype <- c("1st to 5th", "6th to 8th", "9th to 10th", "11th to 12th")
+                                           
+df.long$classtype <- factor(df.long$classtype,                                  
+                  levels = c("1st to 5th", "6th to 8th", "9th to 10th", "11th to 12th"))
+
+
+ggplot(df.long, aes(x = classtype, y = percentage, fill = factor(percentage), label = percentage)) + 
+  geom_bar(stat = "identity", width = 0.7) + scale_fill_brewer(palette = "Blues") + theme_minimal() + 
+  theme(legend.position = "none") + geom_text(colour = "skyblue", nudge_y = 1) +
+  labs(x = "Stages of Education", y = "Drop-out  %", title = "Drop-out in Different Class Levels", subtitle = "For Year 2013", caption = "Figure 1.1    (Complete Data was not avilable for year 2014 and 2015)")
+```
+
+### In different Gender
+
+For doing this visualization lets first create the data set.
+
+```{r drop gender dset}
+
+drop_long <- listofdf$drop_out_rate  
+
+drop_long <- pivot_longer(drop_long, cols=3:14, 
+                            names_to = "class", values_to = "gre")
+drop_long <- drop_long %>% filter(., !((class == "primary_total")|
+                                            (class == "secondary_total") |
+                                             (class == "hrsecondary_total") |
+                                             (class == "upper_primary_total")),
+                                      state_ut == "All India")
+
+
+drop_long$gender <- rep(c("boys","girls"), times = 12)
+drop_long$classtype <- rep(c("1st to 5th", "1st to 5th", "6th to 8th", 
+                               "6th to 8th","9th to 10th", "9th to 10th", 
+                               "11th to 12th", "11th to 12th"), times = 3)
+
+drop_long$classtype <- factor(drop_long$classtype,                                  
+                            levels = c("1st to 5th", "6th to 8th", "9th to 10th", "11th to 12th"))
+
+
+```
+
+Lets visualize the Drop-out Rate in different Genders
+
+```{r drop gender plot 1}
+
+ggplot(drop_long, aes(x = classtype, y = gre, fill = classtype )) + 
+  geom_bar(stat = "identity") + 
+  facet_grid(rows = vars(gender), cols = vars(year))  + 
+  scale_fill_brewer(palette = "Blues",
+                    direction = 1 ) +
+  theme_minimal() + 
+  theme(axis.text.x = element_blank(), legend.position = "bottom") + 
+  labs(x = "Stages of Education", y = "Drop-out Rate", 
+       title = "Drop-out in Different Class Type and Gender", 
+       subtitle = "For Year 2012, 2013 and 2014", caption = "Figure 1.2
+       11th to 12th rows are not present in 2012 and in 2014 Girls Graph (data not avilable).") +
+  guides(fill=guide_legend(title="Class Levels"))
+
+```
+
+When we look closely at the graph we find that the drop-out rate in **6^th^ to 8^th^ Grades Upper Primary Level** the drop-out rate in **Girls** is higher than as compared to **Boys**.
+
+Lets Look at it more closely.
+
+```{r drop gender plot 2}
+
+drop_long <- drop_long %>% 
+  filter(., (class =="upper_primary_boys" | class == "upper_primary_girls")) %>% 
+  group_by(., year,gender) %>% 
+  summarise(gre = mean(gre))
+
+ggplot(drop_long, aes(x = gender, y = gre, fill = gender )) + 
+  geom_bar(stat = "identity") +
+  facet_grid( cols = vars(year))  + 
+  scale_fill_manual(values=c("lightblue", "pink"))+
+  theme_minimal() + 
+  theme(legend.position = "none") + 
+  labs(x = "Gender", y = "Drop-out Rate", 
+       title = "Drop-out in Different Genders in Upper Primary Level", 
+       subtitle = "For Year 2012, 2013 and 2014", caption = "Figure 1.3")
+
+
+```
+
+## Gross Enrollment in Different Class Levels
+
+```{r}
+temp_df_2 <- listofdf$gross_enrolment %>% 
+  filter(.,!is.na(primary_total), !is.na(upper_primary_total), 
+         !is.na(secondary_total), !is.na(higher_secondary_total),
+         state_ut == "All India") %>% 
+  select(., state_ut, year, primary_total, upper_primary_total, 
+         secondary_total, higher_secondary_total)
+
+df.long <- pivot_longer(temp_df_2, cols=3:6, names_to = "class", values_to = "gre")
+df.long$classtype <- c("1st to 5th", "6th to 8th", "9th to 10th", "11th to 12th", "1st to 5th", "6th to 8th", "9th to 10th", "11th to 12th", "1st to 5th", "6th to 8th", "9th to 10th", "11th to 12th")
+                                           
+df.long$classtype <- factor(df.long$classtype,                                  
+                  levels = c("1st to 5th", "6th to 8th", "9th to 10th", "11th to 12th"))
+
+
+ggplot(df.long, aes(x = classtype, y = gre, fill = classtype )) + 
+  geom_bar(stat = "identity") + 
+  facet_grid(cols = vars(year))  + 
+  scale_fill_brewer(palette = "Blues",
+                    direction = -1 ) +
+  theme_minimal() + 
+  theme(axis.text.x = element_blank(), legend.position = "bottom") + 
+  labs(x = "Stages of Education", y = "Gross Enrollment Rate", 
+       title = "Gross Enrollment in Different Class type", 
+       subtitle = "For Year 2013, 2014 and 2015", caption = "Figure 2.1") +
+  guides(fill=guide_legend(title="Class Levels"))
+```
+
+### In Different Gender
+
+For doing this visualization lets first create the data set.
+
+```{r enroll gender dset 1}
+enroll_long <- listofdf$gross_enrolment  
+
+enroll_long <- pivot_longer(enroll_long, cols=3:14, 
+                            names_to = "class", values_to = "gre")
+enroll_long <- enroll_long %>% filter(., !((class == "primary_total")|
+                                            (class == "secondary_total") |
+                                             (class == "higher_secondary_total") |
+                                             (class == "upper_primary_total")),
+                                      state_ut == "All India")
+
+
+enroll_long$gender <- rep(c("boys","girls"), times = 12)
+enroll_long$classtype <- rep(c("1st to 5th", "1st to 5th", "6th to 8th", 
+                               "6th to 8th","9th to 10th", "9th to 10th", 
+                               "11th to 12th", "11th to 12th"), times = 3)
+
+enroll_long$classtype <- factor(enroll_long$classtype,                                  
+                            levels = c("1st to 5th", "6th to 8th", "9th to 10th", "11th to 12th"))
+
+```
+
+Lets visualize the Gross Enrollment Rate in different Gender
+
+```{r enroll gender plot 1}
+ggplot(enroll_long, aes(x = classtype, y = gre, fill = classtype )) + 
+  geom_bar(stat = "identity") + 
+  facet_grid(rows = vars(gender), cols = vars(year))  + 
+  scale_fill_brewer(palette = "Blues",
+                    direction = -1 ) +
+  theme_minimal() + 
+  theme(axis.text.x = element_blank(), legend.position = "bottom") + 
+  labs(x = "Stages of Education", y = "Gross Enrollment Rate", 
+       title = "Gross Enrollment in Different Class Type and Gender", 
+       subtitle = "For Year 2013, 2014 and 2015", caption = "Figure 2.2") +
+  guides(fill=guide_legend(title="Class Levels"))
+```
+
+When looked closely we find slight difference between Gross Enrollment Rate in different Gender, to see the difference lets plot a graph only based on Gender.
+
+```{r enroll gender plot 2}
+enroll_long <- enroll_long %>% 
+  group_by(., year,gender) %>% 
+  summarise(gre = mean(gre))
+
+ggplot(enroll_long, aes(x = gender, y = gre, fill = gender )) + 
+  geom_bar(stat = "identity") +
+  facet_grid( cols = vars(year))  + 
+  scale_fill_manual(values=c("lightblue", "pink"))+
+  theme_minimal() + 
+  theme(legend.position = "none") + 
+  labs(x = "Gender", y = "Gross Enrollment Rate", 
+       title = "Gross Enrollment in Different Genders", 
+       subtitle = "For Year 2013, 2014 and 2015", caption = "Figure 2.3")
+```
+
+This graph shows that the Gross Enrollment Rate in Girls is slightly higher than the boys.
+
+## Maps Visualization
+
+To visualize data on maps first we need to load the map data and join the map data with other data to form visualization.
+
+Let's load the map data.
+
+```{r loading map, message=FALSE, warning=FALSE}
+# getting India dataset
+India <- getData('GADM', country = 'IND', level = 1) %>% 
+  st_as_sf()
+
+```
+
+When we look at the map data `India` using `view(India)` we find that to join the map data set and the data set needed for visualization they should have a common link so we change the column name in `india` to `state_ut` and some of the values in `state_ut` were different so we fixed those values in `state_ut` column.
+
+```{r fixing values}
+
+# matching values
+colnames(India)[4] = "state_ut"
+
+India$state_ut[India$state_ut == 'Andaman and Nicobar'] <- 'Andaman & Nicobar Islands'
+India$state_ut[India$state_ut == 'Dadra and Nagar Haveli'] <- 'Dadra & Nagar Haveli'
+India$state_ut[India$state_ut == 'Daman and Diu'] <- 'Daman & Diu'
+India$state_ut[India$state_ut == 'Jammu and Kashmir'] <- 'Jammu And Kashmir'
+India$state_ut[India$state_ut == 'NCT of Delhi'] <- 'Delhi'
+
+```
+
+### Drop-out Rate {.tabset}
+
+#### **For the Year 2012**
+
+```{r drop-out map 12, fig.width=8.5,fig.height=9}
+drop_df_12 <- drop_df %>% filter(., year == 2012)
+drop_india <- left_join(India, drop_df_12, by = "state_ut")
+
+map_drop_12 <- drop_india %>%  
+  ggplot(aes(label = state_ut)) +
+  geom_sf(aes(fill = all_students))  +
+  scale_fill_distiller(palette = "YlOrRd", 
+                       direction= 1, 
+                       na.value="white") +
+  theme_map() + 
+  theme( plot.title = element_text(size=22),
+         legend.position = "left", 
+         legend.justification ='left') +
+  labs(title = "Drop-out Rate in India", 
+       subtitle = "For the Year 2012",
+       caption = "Map 1.1     Data was insufficent for the states in white colour") +
+
+    guides(fill=guide_legend(title="Drop-out Rate"))
+
+map_drop_12 
+```
+
+#### **For the Year 2013**
+
+```{r drop-out map 13, fig.width=8.5,fig.height=9}
+drop_df_13 <- drop_df %>% filter(., year == 2013)
+drop_india <- left_join(India, drop_df_13, by = "state_ut")
+
+map_drop_13 <- drop_india %>%  
+  ggplot(aes(label = state_ut)) +
+  geom_sf(aes(fill = all_students))  +
+  scale_fill_distiller(palette = "YlOrRd", 
+                       direction= 1, 
+                       na.value="white") +
+  theme_map() + 
+  theme( plot.title = element_text(size=22),
+         legend.position = "left", 
+         legend.justification ='left') +
+  labs(title = "Drop-out Rate in India", 
+       subtitle = "For the Year 2013",
+       caption = "Map 1.2     Data was insufficent for the states in white colour") +
+
+    guides(fill=guide_legend(title="Drop-out Rate"))
+
+map_drop_13 
+```
+
+#### **For the Year 2014**
+
+```{r drop-out map 14, fig.width=8.5,fig.height=9}
+drop_df_14 <- drop_df %>% filter(., year == 2014)
+drop_india <- left_join(India, drop_df_13, by = "state_ut")
+
+map_drop_14 <- drop_india %>%  
+  ggplot(aes(label = state_ut)) +
+  geom_sf(aes(fill = all_students))  +
+  scale_fill_distiller(palette = "YlOrRd", 
+                       direction= 1, 
+                       na.value="white") +
+  theme_map() + 
+  theme( plot.title = element_text(size=22),
+         legend.position = "left", 
+         legend.justification ='left') +
+  labs(title = "Drop-out Rate in India", 
+       subtitle = "For the Year 2014",
+       caption = "Map 1.3     Data was insufficent for the states in white colour") +
+
+    guides(fill=guide_legend(title="Drop-out Rate"))
+
+map_drop_14 
+```
+
+### Overall Facilities Avilability {.tabset}
+
+Lets make a dataset which contains overall score of all the facilities (water, computer, electricity, boys toilet and girls toilet) for all states and U/T.
+
+```{r all facilities, message=FALSE,warning=FALSE}
+all_faci_comb <- rbind(listofdf$water, listofdf$computers, listofdf$electricity, listofdf$boys_toilet, listofdf$girls_toilet) %>% 
+  group_by(state_ut, year) %>% 
+  summarise(all_schools = sum(all_schools))
+
+colnames(all_faci_comb)[3] = "score"
+```
+
+#### **For the Year 2013**
+
+```{r facility map 13, fig.width=8.5,fig.height=9}
+
+faci_13 <- all_faci_comb %>% filter(., year == 2013)
+faci_india <- left_join(India, faci_13, by = "state_ut")
+
+
+map_faci_13 <- faci_india %>%  
+  ggplot(aes(label = state_ut)) +
+  geom_sf(aes(fill = score))  +
+  scale_fill_distiller(palette = "GnBu", 
+                       direction= 1, 
+                       na.value="grey",
+                       limits = c(min(faci_india$score), 
+                                  max(faci_india$score))) +
+  theme_map() + 
+  theme( plot.title = element_text(size=22), 
+         legend.position = "left", 
+         legend.justification ='left') +
+  labs(title = "Overall Facilities avilability in India", 
+       subtitle = "For the Year 2013",
+       caption = "Map 2.1     
+       *Telangana was not formed untill 2014
+       *Sikim",
+       fill = "Facility Score
+       ") 
+
+map_faci_13 
+```
+
+#### **For the Year 2014**
+
+```{r facility map 14, fig.width=8.5,fig.height=9}
+
+faci_14 <- all_faci_comb %>% filter(., year == 2014)
+faci_india <- left_join(India, faci_14, by = "state_ut")
+
+
+map_faci_14 <- faci_india %>%  
+  ggplot(aes(label = state_ut)) +
+  geom_sf(aes(fill = score))  +
+  scale_fill_distiller(palette = "GnBu", 
+                       direction= 1, 
+                       na.value="grey",
+                       limits = c(min(faci_india$score), 
+                                  max(faci_india$score))) +
+  theme_map() + 
+  theme( plot.title = element_text(size=22), 
+         legend.position = "left", 
+         legend.justification ='left') +
+  labs(title = "Overall Facilities avilability in India", 
+       subtitle = "For the Year 2014",
+       caption = "Map 2.2",
+       fill = "Facility Score
+       ") 
+
+map_faci_14 
+```
+
+#### **For the Year 2015**
+
+```{r facility map 15, fig.width=8.5,fig.height=9}
+
+faci_15 <- all_faci_comb %>% filter(., year == 2015)
+faci_india <- left_join(India, faci_15, by = "state_ut")
+
+
+map_faci_15 <- faci_india %>%  
+  ggplot(aes(label = state_ut)) +
+  geom_sf(aes(fill = score))  +
+  scale_fill_distiller(palette = "GnBu", 
+                       direction= 1, 
+                       na.value="grey",
+                       limits = c(min(faci_india$score), 
+                                  max(faci_india$score))) +
+  theme_map() + 
+  theme( plot.title = element_text(size=22), 
+         legend.position = "left", 
+         legend.justification ='left') +
+  labs(title = "Overall Facilities avilability in India", 
+       subtitle = "For the Year 2015",
+       caption = "Map 2.3",
+       fill = "Facility Score
+       ") 
+
+map_faci_15 
+```
+
+### Gross Enrollment {.tabset}
+
+First create a dataset for Gross Enrollment.
+
+```{r}
+gross_enroll <- listofdf$gross_enrolment
+
+gross_enroll$all_students <- round(rowMeans(subset(gross_enroll, select = c( "primary_total", "upper_primary_total","secondary_total","higher_secondary_total")), na.rm = TRUE), 2)
+
+gross_enroll <- gross_enroll %>% 
+  select(., state_ut, year, all_students)
+```
+
+#### **For the Year 2013**
+
+```{r enroll map 13, fig.width=8.5,fig.height=9}
+
+enroll_13 <- gross_enroll %>% filter(., year == 2013)
+faci_india <- left_join(India, enroll_13, by = "state_ut")
+
+
+map_enroll_13 <- faci_india %>%  
+  ggplot(aes(label = state_ut)) +
+  geom_sf(aes(fill = all_students))  +
+  scale_fill_distiller(palette = "GnBu", 
+                       direction= 1, 
+                       na.value="grey",
+                       limits = c(min(faci_india$all_students), 
+                                  max(faci_india$all_students))) +
+  theme_map() + 
+  theme( plot.title = element_text(size=22), 
+         legend.position = "left", 
+         legend.justification ='left') +
+  labs(title = "Gross Enrollment Rate in India", 
+       subtitle = "For the Year 2013",
+       caption = "Map 3.1     
+       *Telangana was not formed untill 2014",
+       fill = "Gross Enrollment Rate
+       ") 
+
+map_enroll_13 
+```
+
+#### **For the Year 2014**
+
+```{r enroll map 14, fig.width=8.5,fig.height=9}
+
+enroll_14 <- gross_enroll %>% filter(., year == 2014)
+faci_india <- left_join(India, enroll_14, by = "state_ut")
+
+
+map_enroll_14 <- faci_india %>%  
+  ggplot(aes(label = state_ut)) +
+  geom_sf(aes(fill = all_students))  +
+  scale_fill_distiller(palette = "GnBu", 
+                       direction= 1, 
+                       na.value="grey",
+                       limits = c(min(faci_india$all_students), 
+                                  max(faci_india$all_students))) +
+  theme_map() + 
+  theme( plot.title = element_text(size=22), 
+         legend.position = "left", 
+         legend.justification ='left') +
+  labs(title = "Gross Enrollment Rate in India", 
+       subtitle = "For the Year 2014",
+       caption = "Map 3.2",
+       fill = "Gross Enrollment Rate
+       ") 
+
+map_enroll_14 
+```
+
+#### **For the Year 2015**
+
+```{r enroll map 15, fig.width=8.5,fig.height=9}
+
+enroll_15 <- gross_enroll %>% filter(., year == 2015)
+faci_india <- left_join(India, enroll_15, by = "state_ut")
+
+
+map_enroll_15 <- faci_india %>%  
+  ggplot(aes(label = state_ut)) +
+  geom_sf(aes(fill = all_students ))  +
+  scale_fill_distiller(palette = "GnBu", 
+                       direction= 1, 
+                       na.value="grey",
+                       limits = c(min(faci_india$all_students), 
+                                  max(faci_india$all_students))) +
+  theme_map() + 
+  theme( plot.title = element_text(size=22), 
+         legend.position = "left", 
+         legend.justification ='left') +
+  labs(title = "Gross Enrollment Rate in India", 
+       subtitle = "For the Year 2015",
+       caption = "Map 3.3",
+       fill = "Gross Enrollment Rate
+       ") 
+
+map_enroll_15 
+```
+
+# Key Insigths
+
+![](https://englishtribuneimages.blob.core.windows.net/gallary-content/2021/9/2021_9$largeimg_1250595852.jpg){width="650"}
+
+There are few Key insights we find in this analysis.
+
+1.  **Drop-out rate rises dramatically from 3.77% in Upper Primary Level to 17.86% in Secondary Level and then drops again to 1.54% in Higher Secondary Level.**
+
+-   This could be due to The Right to Education Act (RTE), is an Act of the Parliament of India, which describes the modalities of the importance of **free and compulsory education for children between 6 and 14 in India**[@rte].
+-   As age most children in Secondary Level is around 14.
+
+2.  Gross Enrollment rate is Highest in Primary Level and Gradually drops moving to higher level.
+
+3.  Drop-out rate in the North East Region in highest.
+
+-   This could due to the difficult terrain and uncertain weather and lack of development.
+-   Northeast region has loweset number of facilites present in there schools.
+-   Drop-out rate cannot be calculated for all states and U/T because of insufficient data.
+
+4.  Gross Enrollment in states with higher facilities availability is in between normal levels (90% to 100%).
+
+5.  **Drop-out rate in Girls in Upper Primary level is higher as compared with boys in the same level.**
+
+-   The difference between boys and girls drop-out rate in Upper Primary level is decreasing year by year.
+
+6.  In North East Region the Gross Enrollment Rate is Higher than 100 and also have a high dropout rate.
+
+## Next Steps
+
+1.  The data used in this analysis is older, for gaining new insights fresher data will be needed.
+
+2.  New data sets with more diverse facilities in school, enrollment based indicators and teacher related indicators should be added.[@rep13, @rep14; @rep15]
+
+3.  Digitization of New reports given by DISE [@udise] should be done.
+
+# References
+
+::: {#refs}
+:::
+
+# Appendix {.unnumbered}
+
+**Abbreviations**
+
+U/T = Union Territories
+
+UDISE = Unified District Information System for Education
+
+primary = Primary Education Level (class 1st to 5th)
+
+u_primary = Upper Primary Education Level (class 6th to 8th)
+
+sec = Secondary Education Level (class 9th to 10th)
+
+hrsecondary = Higher Secondary Education Level (class 11th to 12th)
