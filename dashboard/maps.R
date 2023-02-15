@@ -12,7 +12,7 @@ conflict_prefer("select", "dplyr")
 # getting india dataset
 India <- getData('GADM', country = 'IND', level = 1) %>% 
   st_as_sf()
-# matching values
+# matching values 
 colnames(India)[4] = "state_ut"
 India$state_ut[India$state_ut == 'Andaman and Nicobar'] <- 'Andaman & Nicobar Islands'
 India$state_ut[India$state_ut == 'Dadra and Nagar Haveli'] <- 'Dadra & Nagar Haveli'
@@ -75,11 +75,7 @@ ui <- fluidPage(
            p("Please Feel free to contact me twitter or linkedin on any Query you may have.")
            )
   )
-
-      #textOutput("selected_year"),
-      #textOutput("selected_category"),
-      #DT::dataTableOutput("mytable"),
-      
+ 
   )
   
 
@@ -87,6 +83,7 @@ ui <- fluidPage(
 # Define server logic ----
 server <- function(input, output, session) {
   
+  # Changing slider range based on selected year and topic
   observe({
     val <- input$select_topic
     max_val <- x <- map_data %>% select(., year, input$select_topic) %>% 
@@ -100,11 +97,9 @@ server <- function(input, output, session) {
     updateSliderInput(session, "slider", value = c(min_val, max_val),
                       min = min_val, max = max_val)
   })
-  output$selected_year <- renderText({
-    paste("You have selected the year:", input$select_year)
-  })
+
   
-  
+  # table title
   output$table_title <- renderText({
     y <- switch(input$select_topic,
                 'water_faci' = "Drinking Water Facility avilability" , 
@@ -118,6 +113,7 @@ server <- function(input, output, session) {
     if(input$radio == "Table"){print(paste("List of states with ",y," avaibility."))}
   })
   
+  # table
   output$mytable <- DT::renderDataTable({DT::datatable({
     if(input$radio == "Map"){
       
@@ -130,6 +126,8 @@ server <- function(input, output, session) {
     table_data}
        })
   })
+  
+  # warning message
   output$warning <- renderText({
     if(input$select_year == 2012 & input$select_topic != 'drop_rate'){
       print("Warning: Data not present!")
@@ -141,6 +139,8 @@ server <- function(input, output, session) {
       }
     }
   })
+  
+  # Map
   output$map <- renderPlot({
     x <- map_data_2 %>% filter(., year == input$select_year)
     y <- switch(input$select_topic,
